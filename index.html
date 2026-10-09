@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>CyberTap</title>
+<style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    body {
+        background: radial-gradient(circle at 50% 30%, #1d1b3a 0%, #090913 70%);
+        color: white;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        text-align: center;
+        margin: 0;
+        padding: 16px;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+    h2 {
+        margin: 0 0 8px;
+        font-size: 20px;
+        text-shadow: 0 0 12px rgba(0, 255, 204, 0.7);
+        letter-spacing: 2px;
+    }
+    .header-panel {
+        width: 320px;
+        max-width: 100%;
+        height: 34px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 8px;
+        font-size: 15px;
+        font-weight: bold;
+    }
+    .btn-control {
+        padding: 6px 12px;
+        font-size: 12px;
+        font-weight: bold;
+        background: rgba(0, 255, 204, 0.15);
+        color: #00ffcc;
+        border: 2px solid #00ffcc;
+        border-radius: 8px;
+        cursor: pointer;
+        box-shadow: 0 0 10px rgba(0, 255, 204, 0.2);
+    }
+    .btn-control:active { transform: scale(0.92); background: #00ffcc; color: #0f0f1a; }
+    canvas {
+        background-color: #0d0d1a;
+        border: 3px solid #00ffcc;
+        border-radius: 14px;
+        box-shadow: 0 0 30px rgba(0, 255, 204, 0.4), inset 0 0 15px rgba(0,0,0,0.8);
+        touch-action: none;
+        max-width: 100%;
+    }
+    .settings { margin-top: 10px; display: flex; gap: 8px; }
+    .btn-kecil {
+        padding: 6px 10px;
+        font-size: 12px;
+        font-weight: bold;
+        background: rgba(255, 255, 255, 0.07);
+        color: #cfd8ff;
+        border: 1px solid rgba(255, 255, 255, 0.25);
+        border-radius: 8px;
+        cursor: pointer;
+    }
+    .btn-kecil:active { transform: scale(0.94); }
+    .btn-kecil.mati { color: #7a7a99; border-color: rgba(255, 255, 255, 0.12); }
+    .hint { margin-top: 8px; font-size: 12px; color: #8888aa; }
+</style>
+</head>
+<body>
+
+<h2>⚡ Cyber Tap ⚡</h2>
+
+<div class="header-panel">
+    <div>
+        Skor: <span id="skor" style="color:#00ffcc;">0</span> |
+        Combo: <span id="combo" style="color:#ffd700;">0x</span>
+        <span id="levelLabel" style="font-size:11px;margin-left:4px;"></span>
+    </div>
+    <button id="btnPause" class="btn-control" style="display:none;">PAUSE</button>
+</div>
+
+<canvas id="arenaGame" width="320" height="420"></canvas>
+
+<div class="settings">
+    <button id="btnMusik" class="btn-kecil">🎵 Musik: ON</button>
+    <button id="btnGetar" class="btn-kecil">📳 Getar: ON</button>
+</div>
+<div class="hint">HP: ketuk lajur bawah &nbsp;|&nbsp; Keyboard: D F J K &nbsp;|&nbsp; Esc: pause</div>
+
+<script>
+(function () {
+    const canvas = document.getElementById("arenaGame");
+    const ctx = canvas.getContext("2d");
+    const elSkor = document.getElementById("skor");
+    const elCombo = document.getElementById("combo");
+    const elLevel = document.getElementById("levelLabel");
+    const btnPause = document.getElementById("btnPause");
+    const btnMusik = document.getElementById("btnMusik");
+    const btnGetar = document.getElementById("btnGetar");
+
+    const W = canvas.width, H = canvas.height;
+    const jumlahLajur = 4;
+    const lajurLebar = W / jumlahLajur;
+    const targetIdeal = 365;
+
+    // bpm = tempo musik pada kecepatan awal; langkah = jarak antar kotak (dalam hitungan beat)
+    const LEVEL = {
+        medium: { nama: "MEDIUM", warna: "#ffd700", kecepatan: 2.0, maks: 5.0, jumlah: 3, hold: 0.15, naik: 0.015, nyawa: 5, bpm: 100, langkah: [2, 3, 3] },
+        hard:   { nama: "HARD",   warna: "#ff3355", kecepatan: 3.0, maks: 7.0, jumlah: 4, hold: 0.25, naik: 0.025, nyawa: 4, bpm: 128, langkah: [1, 2, 2, 2, 1] }
+    };
+
+    const tombolMenu = [
+        { id: "medium", x: 50, y: 225, w: 220, h: 52, label: "MEDIUM", warna: "#ffd700" },
+        { id: "hard",   x: 50, y: 293, w: 220, h: 52, label: "HARD",   warna: "#ff3355" }
+    ];
+    const tombolPause = [
+        { id: "lanjut", x: 60, y: 170, w: 200, h: 46, label: "LANJUT",     warna: "#00ffcc" },
+        { id: "menu",   x: 60, y: 232, w: 200, h: 46, label: "MENU UTAMA", warna: "#ff6600" }
+    ];
+    const tombolOver = [
+        { id: "ulang", x: 60, y: 284, w: 200, h: 44, label: "MAIN LAGI",  warna: "#00ffcc" },
+        { id: "menu",  x: 60, y: 338, w: 200, h: 44, label: "MENU UTAMA", warna: "#ff6600" }
+    ];
+
+    let layar = "menu";            // menu | hitung | main | pause | over
+    let kunciLevel = "medium";
+    let levelAktif = LEVEL.medium;
+    let skor = 0, combo = 0, nyawa = 5, kecepatan = 2.0;
+    let daftarKotak = [], daftarPartikel = [];
+    let feedback = { pesan: "", warna: "#fff", alpha: 0 };
+    let waktu = 0, hitung = 0, shake = 0, skalaFrame = 1, waktuTerakhir = 0;
+    let rekorBaru = false;
+    let fxLajur = [0, 0, 0, 0];
+    let terbaik = { medium: 0, hard: 0 };
+    let statistik = { perfect: 0, great: 0, good: 0, hold: 0, miss: 0 };
+    let holdAkum = 0, pulsa = 0;
+
+    // Pola kotak yang selaras dengan beat
+    let P = 72;                 // jarak (piksel) satu beat
+    let antrianBawah = 0;       // posisi bawah kotak terakhir yang dibuat
+    let jedaSetelah = 0;        // beat yang dipakai kotak terakhir (hold = 3)
+    let halfY = 0;              // penanda setengah-beat yang bergerak seperti kotak
+    let cLangkah = 0;           // penghitung setengah-beat
+
+    let musikAktif = true, getarAktif = true;
+
+    // ---------- Penyimpanan ----------
+    function muatRekor() {
+        for (const k in terbaik) {
+            try { terbaik[k] = parseInt(localStorage.getItem("rhythmPro_" + k), 10) || 0; }
+            catch (e) { terbaik[k] = 0; }
+        }
+        try {
+            musikAktif = localStorage.getItem("apabya_musik") !== "0";
+            getarAktif = localStorage.getItem("apabya_getar") !== "0";
+        } catch (e) {}
+    }
+    function simpanRekor(k, v) {
+        try { localStorage.setItem("rhythmPro_" + k, String(v)); } catch (e) {}
+    }
+    function simpanPref() {
+        try {
+            localStorage.setItem("apabya_musik", musikAktif ? "1" : "0");
+            localStorage.setItem("apabya_getar", getarAktif ? "1" : "0");
+        } catch (e) {}
+    }
+    muatRekor();
+
+    function segarkanTombolPref() {
+        btnMusik.textContent = "🎵 Musik: " + (musikAktif ? "ON" : "OFF");
+        btnGetar.textContent = "📳 Getar: " + (getarAktif ? "ON" : "OFF");
+        btnMusik.className = "btn-kecil" + (musikAktif ? "" : " mati");
+        btnGetar.className = "btn-kecil" + (getarAktif ? "" : " mati");
+    }
+    segarkanTombolPref();
+    btnMusik.addEventListener("click", function () { musikAktif = !musikAktif; simpanPref(); segarkanTombolPref(); initAudio(); });
+    btnGetar.addEventListener("click", function () {
+        getarAktif = !getarAktif; simpanPref(); segarkanTombolPref();
+        if (getarAktif) getar(30);
+    });
+
+    function getar(pola) {
+        try { if (getarAktif && navigator.vibrate) navigator.vibrate(pola); } catch (e) {}
+    }
+
+    // ---------- Latar bintang ----------
+    const bintang = [];
+    for (let i = 0; i < 45; i++) {
+        bintang.push({ x: Math.random() * W, y: Math.random() * H, z: 0.3 + Math.random() * 1.2, r: 1 + Math.random() * 1.6 });
+    }
+
+    // ---------- Audio ----------
+    let audioCtx = null, musikGain = null, bufferNoise = null;
+    function initAudio() {
+        try {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                musikGain = audioCtx.createGain();
+                musikGain.gain.value = 0.55;
+                musikGain.connect(audioCtx.destination);
+                const panjang = Math.floor(audioCtx.sampleRate * 0.5);
+                bufferNoise = audioCtx.createBuffer(1, panjang, audioCtx.sampleRate);
+                const data = bufferNoise.getChannelData(0);
+                for (let i = 0; i < panjang; i++) data[i] = Math.random() * 2 - 1;
+            }
+            if (audioCtx.state === "suspended") audioCtx.resume();
+        } catch (e) { audioCtx = null; musikGain = null; }
+    }
+
+    function suara(jenis) {
+        if (!audioCtx) return;
+        try {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            const t = audioCtx.currentTime;
+            let d = 0.12;
+            if (jenis === "PERFECT") {
+                osc.type = "triangle";
+                osc.frequency.setValueAtTime(587.33, t);
+                osc.frequency.exponentialRampToValueAtTime(880, t + d);
+                gain.gain.setValueAtTime(0.2, t);
+            } else if (jenis === "GREAT") {
+                osc.type = "sine"; osc.frequency.setValueAtTime(440, t); gain.gain.setValueAtTime(0.15, t);
+            } else if (jenis === "HOLD") {
+                osc.type = "sawtooth"; osc.frequency.setValueAtTime(659.25, t); gain.gain.setValueAtTime(0.18, t);
+            } else if (jenis === "MISS") {
+                d = 0.22;
+                osc.type = "square";
+                osc.frequency.setValueAtTime(180, t);
+                osc.frequency.exponentialRampToValueAtTime(90, t + d);
+                gain.gain.setValueAtTime(0.12, t);
+            } else if (jenis === "OVER") {
+                d = 0.6;
+                osc.type = "sawtooth";
+                osc.frequency.setValueAtTime(330, t);
+                osc.frequency.exponentialRampToValueAtTime(70, t + d);
+                gain.gain.setValueAtTime(0.18, t);
+            } else if (jenis === "TICK") {
+                osc.type = "sine"; osc.frequency.setValueAtTime(520, t); gain.gain.setValueAtTime(0.12, t);
+            } else if (jenis === "GO") {
+                osc.type = "triangle"; osc.frequency.setValueAtTime(880, t); gain.gain.setValueAtTime(0.18, t);
+            } else {
+                osc.type = "sine"; osc.frequency.setValueAtTime(329.63, t); gain.gain.setValueAtTime(0.1, t);
+            }
+            gain.gain.exponentialRampToValueAtTime(0.001, t + d);
+            osc.start(t); osc.stop(t + d);
+        } catch (e) {}
+    }
+
+    // ---------- Musik (disintesis lewat kode, mengikuti beat kotak) ----------
+    function nadaKick(t) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(140, t);
+        osc.frequency.exponentialRampToValueAtTime(45, t + 0.12);
+        gain.gain.setValueAtTime(0.55, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+        osc.connect(gain); gain.connect(musikGain);
+        osc.start(t); osc.stop(t + 0.2);
+    }
+    function nadaNoise(t, frek, tipe, vol, durasi) {
+        const src = audioCtx.createBufferSource();
+        src.buffer = bufferNoise;
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = tipe;
+        filter.frequency.value = frek;
+        const gain = audioCtx.createGain();
+        gain.gain.setValueAtTime(vol, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + durasi);
+        src.connect(filter); filter.connect(gain); gain.connect(musikGain);
+        src.start(t, Math.random() * 0.3, durasi + 0.02);
+    }
+    function nadaBass(t, frek) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "triangle";
+        osc.frequency.setValueAtTime(frek, t);
+        gain.gain.setValueAtTime(0.28, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+        osc.connect(gain); gain.connect(musikGain);
+        osc.start(t); osc.stop(t + 0.32);
+    }
+    function nadaPluck(t, frek) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = "square";
+        osc.frequency.setValueAtTime(frek, t);
+        gain.gain.setValueAtTime(0.045, t);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+        osc.connect(gain); gain.connect(musikGain);
+        osc.start(t); osc.stop(t + 0.18);
+    }
+
+    const akarBass = [110, 87.31, 130.81, 98];
+    const akordNada = [[0, 3, 7, 12], [0, 4, 7, 12], [0, 4, 7, 12], [0, 4, 7, 11]];
+    const polaPluck = [-1, 0, 1, 2, -1, 1, 2, 3];
+
+    function dentum(c) {
+        const genap = (c % 2 === 0);
+        if (genap) pulsa = 1;
+        if (!musikAktif || !audioCtx || !musikGain) return;
+        try {
+            const t = audioCtx.currentTime;
+            const pos = c % 8;
+            const bar = Math.floor(c / 8) % 4;
+            if (genap) nadaKick(t);
+            else nadaNoise(t, 7000, "highpass", 0.06, 0.05);
+            if (pos === 2 || pos === 6) nadaNoise(t, 1800, "bandpass", 0.2, 0.14);
+            if (pos === 0 || pos === 3 || pos === 4 || pos === 7) nadaBass(t, akarBass[bar]);
+            const idx = polaPluck[pos];
+            if (idx >= 0) nadaPluck(t, akarBass[bar] * 4 * Math.pow(2, akordNada[bar][idx] / 12));
+        } catch (e) {}
+    }
+
+    // ---------- Util ----------
+    function setSkorCombo() {
+        elSkor.textContent = skor;
+        elCombo.textContent = combo + "x";
+    }
+    function tampilFeedback(pesan, warna, alpha) {
+        feedback.pesan = pesan; feedback.warna = warna; feedback.alpha = alpha || 1;
+    }
+    function kembangApi(x, y, warna) {
+        for (let i = 0; i < 22; i++) {
+            const s = Math.random() * Math.PI * 2;
+            const v = Math.random() * 4 + 1;
+            daftarPartikel.push({ x, y, vx: Math.cos(s) * v, vy: Math.sin(s) * v, warna, alpha: 1, ukuran: Math.random() * 4 + 2 });
+        }
+    }
+    function rrect(x, y, w, h, r) {
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(x, y, w, h, r); else ctx.rect(x, y, w, h);
+    }
+
+    // ---------- Kotak ----------
+    function buatKotak(i, awal) {
+        const warnaPilihan = ["#ff0055", "#00ffcc", "#ffd700", "#ff6600", "#9900ff"];
+        const dipakai = [];
+        for (let j = 0; j < daftarKotak.length; j++) {
+            if (j === i || !daftarKotak[j]) continue;
+            dipakai.push(daftarKotak[j].lajur);
+        }
+        const bebas = [];
+        for (let l = 0; l < jumlahLajur; l++) if (dipakai.indexOf(l) === -1) bebas.push(l);
+        const lajur = bebas.length ? bebas[Math.floor(Math.random() * bebas.length)] : Math.floor(Math.random() * jumlahLajur);
+
+        const hold = !awal && Math.random() < levelAktif.hold;
+        const tinggi = hold ? 3 * P + 5 : 35;
+        const daftarLangkah = levelAktif.langkah;
+        const langkah = (awal && i === 0) ? 2 : daftarLangkah[Math.floor(Math.random() * daftarLangkah.length)];
+        const bawah = antrianBawah - (jedaSetelah + langkah) * P;
+        antrianBawah = bawah;
+        jedaSetelah = hold ? 3 : 0;
+
+        daftarKotak[i] = {
+            lajur: lajur,
+            x: lajur * lajurLebar + (lajurLebar - 55) / 2,
+            y: bawah - tinggi,
+            lebar: 55,
+            tinggi: tinggi,
+            isHold: hold,
+            ditekan: false,
+            idTekan: null,
+            warna: hold ? "#ffcc00" : warnaPilihan[Math.floor(Math.random() * warnaPilihan.length)]
+        };
+    }
+
+    // ---------- Alur game ----------
+    function mulaiGame(kunci) {
+        initAudio();
+        kunciLevel = kunci;
+        levelAktif = LEVEL[kunci];
+        skor = 0; combo = 0;
+        nyawa = levelAktif.nyawa;
+        kecepatan = levelAktif.kecepatan;
+        daftarKotak = []; daftarPartikel = [];
+        feedback.alpha = 0;
+        shake = 0; rekorBaru = false; holdAkum = 0; pulsa = 0;
+        statistik = { perfect: 0, great: 0, good: 0, hold: 0, miss: 0 };
+
+        P = levelAktif.kecepatan * 3600 / levelAktif.bpm;
+        antrianBawah = -10 + 2 * P;
+        jedaSetelah = 0;
+        for (let i = 0; i < levelAktif.jumlah; i++) buatKotak(i, true);
+
+        // penanda beat: kotak pertama berada tepat di kisi beat
+        let j = Math.floor((targetIdeal + 10) / (P / 2));
+        if (j % 2 !== 0) j--;
+        halfY = -10 + j * (P / 2);
+        cLangkah = 0;
+
+        setSkorCombo();
+        elLevel.textContent = levelAktif.nama;
+        elLevel.style.color = levelAktif.warna;
+        btnPause.textContent = "PAUSE";
+        btnPause.style.display = "block";
+        hitung = 0;
+        layar = "hitung";
+        suara("TICK");
+    }
+
+    function keMenu() {
+        layar = "menu";
+        btnPause.style.display = "none";
+        elLevel.textContent = "";
+        daftarKotak = []; daftarPartikel = [];
+    }
+
+    function togglePause() {
+        if (layar === "main") { layar = "pause"; btnPause.textContent = "LANJUT"; }
+        else if (layar === "pause") { layar = "main"; btnPause.textContent = "PAUSE"; }
+    }
+    btnPause.addEventListener("click", togglePause);
+
+    function hitungAkurasi() {
+        const s = statistik;
+        const total = s.perfect + s.great + s.good + s.hold + s.miss;
+        if (total === 0) return 0;
+        return Math.round((s.perfect + s.hold + s.great * 0.7 + s.good * 0.4) / total * 100);
+    }
+    function ambilGrade(akurasi) {
+        if (akurasi >= 95) return { huruf: "S", warna: "#ffd700" };
+        if (akurasi >= 85) return { huruf: "A", warna: "#00ff99" };
+        if (akurasi >= 70) return { huruf: "B", warna: "#00ccff" };
+        if (akurasi >= 50) return { huruf: "C", warna: "#ff9933" };
+        return { huruf: "D", warna: "#ff3355" };
+    }
+
+    function akhiriGame() {
+        layar = "over";
+        btnPause.style.display = "none";
+        suara("OVER");
+        getar([120, 60, 150]);
+        shake = 14;
+        if (skor > terbaik[kunciLevel]) {
+            terbaik[kunciLevel] = skor;
+            simpanRekor(kunciLevel, skor);
+            rekorBaru = true;
+        }
+    }
+
+    function kehilanganNyawa(pesan) {
+        nyawa--;
+        combo = 0;
+        shake = 9;
+        statistik.miss++;
+        setSkorCombo();
+        tampilFeedback(pesan, "#ff3333", 1);
+        suara("MISS");
+        getar(60);
+        if (nyawa <= 0) { nyawa = 0; akhiriGame(); }
+    }
+
+    // ---------- Input inti ----------
+    function tekanLajur(lajur, id) {
+        if (layar !== "main") return;
+        fxLajur[lajur] = 1;
+        let terbaikIdx = -1, jarakTerbaik = 1e9;
+        for (let i = 0; i < daftarKotak.length; i++) {
+            const k = daftarKotak[i];
+            if (k.lajur !== lajur || k.ditekan) continue;
+            const bawah = k.y + k.tinggi;
+            if (bawah >= 280 && bawah <= 430) {
+                const jarak = Math.abs(bawah - targetIdeal);
+                if (jarak < jarakTerbaik) { jarakTerbaik = jarak; terbaikIdx = i; }
+            }
+        }
+        if (terbaikIdx === -1) return;
+
+        const k = daftarKotak[terbaikIdx];
+        if (k.isHold) {
+            k.ditekan = true;
+            k.idTekan = id;
+            tampilFeedback("HOLDING...", "#ffcc00", 0.8);
+            getar(10);
+        } else {
+            let poin;
+            if (jarakTerbaik < 15)      { tampilFeedback("PERFECT! +30", "#00ffcc"); poin = 30; suara("PERFECT"); statistik.perfect++; getar(15); }
+            else if (jarakTerbaik < 30) { tampilFeedback("GREAT! +20", "#ffd700"); poin = 20; suara("GREAT"); statistik.great++; getar(10); }
+            else                        { tampilFeedback("GOOD +10", "#ffffff"); poin = 10; suara("GOOD"); statistik.good++; getar(8); }
+            combo++;
+            skor += poin + Math.floor(combo / 5) * 5;
+            setSkorCombo();
+            kembangApi(k.x + k.lebar / 2, targetIdeal, k.warna);
+            buatKotak(terbaikIdx, false);
+        }
+        if (kecepatan < levelAktif.maks) kecepatan += levelAktif.naik;
+    }
+
+    function lepasId(id) {
+        if (layar !== "main") return;
+        for (let i = 0; i < daftarKotak.length; i++) {
+            const k = daftarKotak[i];
+            if (k.isHold && k.ditekan && k.idTekan === id) {
+                if (k.tinggi > 15) kehilanganNyawa("TERLALU CEPAT!");
+                buatKotak(i, false);
+                if (layar !== "main") return;
+            }
+        }
+    }
+
+    function kenaTombol(daftar, x, y) {
+        for (let i = 0; i < daftar.length; i++) {
+            const b = daftar[i];
+            if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return b.id;
+        }
+        return null;
+    }
+
+    // ---------- Event pointer ----------
+    function posisi(e) {
+        const r = canvas.getBoundingClientRect();
+        return {
+            x: (e.clientX - r.left) * (W / r.width),
+            y: (e.clientY - r.top) * (H / r.height)
+        };
+    }
+
+    canvas.addEventListener("pointerdown", function (e) {
+        e.preventDefault();
+        initAudio();
+        const p = posisi(e);
+
+        if (layar === "menu") {
+            const id = kenaTombol(tombolMenu, p.x, p.y);
+            if (id) mulaiGame(id);
+        } else if (layar === "pause") {
+            const id = kenaTombol(tombolPause, p.x, p.y);
+            if (id === "lanjut") togglePause();
+            else if (id === "menu") keMenu();
+        } else if (layar === "over") {
+            const id = kenaTombol(tombolOver, p.x, p.y);
+            if (id === "ulang") mulaiGame(kunciLevel);
+            else if (id === "menu") keMenu();
+        } else if (layar === "main") {
+            if (p.y >= 300) {
+                const lajur = Math.max(0, Math.min(jumlahLajur - 1, Math.floor(p.x / lajurLebar)));
+                tekanLajur(lajur, "p" + e.pointerId);
+            }
+        }
+    });
+
+    function akhiriPointer(e) { lepasId("p" + e.pointerId); }
+    canvas.addEventListener("pointerup", akhiriPointer);
+    canvas.addEventListener("pointercancel", akhiriPointer);
+    canvas.addEventListener("pointerleave", akhiriPointer);
+    canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+
+    // ---------- Keyboard ----------
+    const petaTombol = { d: 0, f: 1, j: 2, k: 3 };
+    window.addEventListener("keydown", function (e) {
+        const key = e.key.toLowerCase();
+        if (key === "escape" || key === "p") { togglePause(); return; }
+        if (layar === "over" && (key === "enter" || key === " ")) { mulaiGame(kunciLevel); return; }
+        if (e.repeat) return;
+        if (key in petaTombol) { initAudio(); tekanLajur(petaTombol[key], "k" + key); }
+    });
+    window.addEventListener("keyup", function (e) {
+        const key = e.key.toLowerCase();
+        if (key in petaTombol) lepasId("k" + key);
+    });
+
+    // ---------- Gambar ----------
+    function gambarLatar() {
+        const lajuLatar = layar === "main" ? kecepatan * 0.25 : 0.25;
+        for (let i = 0; i < bintang.length; i++) {
+            const b = bintang[i];
+            b.y += b.z * (0.3 + lajuLatar) * skalaFrame;
+            if (b.y > H) { b.y = -4; b.x = Math.random() * W; }
+            ctx.fillStyle = "rgba(180,220,255," + (0.15 + b.z * 0.2) + ")";
+            ctx.fillRect(b.x, b.y, b.r, b.r * (1 + lajuLatar * 0.6));
+        }
+    }
+
+    function gambarLajur() {
+        for (let i = 0; i < jumlahLajur; i++) {
+            ctx.strokeStyle = "rgba(255,255,255,0.06)";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(i * lajurLebar, 0, lajurLebar, H);
+
+            if (fxLajur[i] > 0) {
+                const g = ctx.createLinearGradient(0, 230, 0, H);
+                g.addColorStop(0, "rgba(0,255,204,0)");
+                g.addColorStop(1, "rgba(0,255,204," + (fxLajur[i] * 0.35) + ")");
+                ctx.fillStyle = g;
+                ctx.fillRect(i * lajurLebar, 230, lajurLebar, H - 230);
+                fxLajur[i] = Math.max(0, fxLajur[i] - 0.07 * skalaFrame);
+            }
+
+            ctx.fillStyle = "rgba(0,255,204," + (0.04 + pulsa * 0.08) + ")";
+            ctx.fillRect(i * lajurLebar + 4, 350, lajurLebar - 8, 60);
+
+            ctx.save();
+            ctx.strokeStyle = "rgba(0,255,204," + (0.45 + pulsa * 0.45) + ")";
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 8 + pulsa * 10;
+            ctx.shadowColor = "#00ffcc";
+            ctx.strokeRect(i * lajurLebar + 4, 350, lajurLebar - 8, 60);
+            ctx.restore();
+        }
+        pulsa = Math.max(0, pulsa - 0.08 * skalaFrame);
+
+        ctx.save();
+        ctx.strokeStyle = "rgba(255,255,255,0.18)";
+        ctx.setLineDash([6, 6]);
+        ctx.beginPath();
+        ctx.moveTo(0, targetIdeal);
+        ctx.lineTo(W, targetIdeal);
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    function tombolGambar(b, sub) {
+        ctx.save();
+        ctx.fillStyle = "rgba(255,255,255,0.07)";
+        ctx.strokeStyle = b.warna;
+        ctx.lineWidth = 2;
+        ctx.shadowBlur = 14;
+        ctx.shadowColor = b.warna;
+        rrect(b.x, b.y, b.w, b.h, 14);
+        ctx.fill();
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = b.warna;
+        ctx.textAlign = "center";
+        ctx.font = "bold 18px 'Segoe UI', Arial";
+        ctx.fillText(b.label, b.x + b.w / 2, b.y + (sub ? 23 : b.h / 2 + 6));
+        if (sub) {
+            ctx.fillStyle = "#a0a0c0";
+            ctx.font = "12px 'Segoe UI', Arial";
+            ctx.fillText(sub, b.x + b.w / 2, b.y + 41);
+        }
+        ctx.restore();
+    }
+
+    function gambarMenu() {
+        ctx.fillStyle = "rgba(10,10,20,0.45)";
+        ctx.fillRect(0, 0, W, H);
+
+        const skala = 1 + Math.sin(waktu / 20) * 0.03;
+        ctx.save();
+        ctx.translate(W / 2, 100);
+        ctx.scale(skala, skala);
+        ctx.textAlign = "center";
+        ctx.font = "bold 46px 'Segoe UI', Arial";
+        ctx.fillStyle = "#00ffcc";
+        ctx.shadowBlur = 22;
+        ctx.shadowColor = "#00ffcc";
+        ctx.fillText("Cyber Tap", 0, 0);
+        ctx.font = "bold 34px 'Segoe UI', Arial";
+        ctx.fillStyle = "#ff0055";
+        ctx.shadowColor = "#ff0055";
+        ctx.fillText("", 0, 40);
+        ctx.restore();
+
+        ctx.fillStyle = "#a0a0c0";
+        ctx.font = "14px 'Segoe UI', Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("Pilih level untuk mulai", W / 2, 198);
+
+        for (let i = 0; i < tombolMenu.length; i++) {
+            const b = tombolMenu[i];
+            const ket = (b.id === "medium" ? "Santai tapi seru" : "Cepat & padat") + "  •  Best " + terbaik[b.id];
+            tombolGambar(b, ket);
+        }
+        ctx.fillStyle = "#6a6a8a";
+        ctx.font = "11px 'Segoe UI', Arial";
+        ctx.fillText("Ketuk tepat di beat! Tahan kotak panjang sampai habis.", W / 2, 378);
+    }
+
+    function gambarPause() {
+        ctx.fillStyle = "rgba(10,10,20,0.9)";
+        ctx.fillRect(0, 0, W, H);
+        ctx.save();
+        ctx.fillStyle = "#00ffcc";
+        ctx.shadowBlur = 12;
+        ctx.shadowColor = "#00ffcc";
+        ctx.font = "bold 24px 'Segoe UI', Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("GAME PAUSED", W / 2, 130);
+        ctx.restore();
+        for (let i = 0; i < tombolPause.length; i++) tombolGambar(tombolPause[i], null);
+    }
+
+    function gambarOver() {
+        ctx.fillStyle = "rgba(10,10,20,0.92)";
+        ctx.fillRect(0, 0, W, H);
+        const akurasi = hitungAkurasi();
+        const grade = ambilGrade(akurasi);
+
+        ctx.save();
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#ff3355";
+        ctx.shadowBlur = 20;
+        ctx.shadowColor = "#ff3355";
+        ctx.font = "bold 30px 'Segoe UI', Arial";
+        ctx.fillText("GAME OVER", W / 2, 52);
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = "#a0a0c0";
+        ctx.font = "13px 'Segoe UI', Arial";
+        ctx.fillText("Level " + levelAktif.nama, W / 2, 74);
+
+        // grade besar
+        ctx.fillStyle = grade.warna;
+        ctx.shadowBlur = 24;
+        ctx.shadowColor = grade.warna;
+        ctx.font = "bold 96px 'Segoe UI', Arial";
+        ctx.fillText(grade.huruf, 78, 188);
+        ctx.shadowBlur = 0;
+
+        // statistik
+        const baris = [
+            ["PERFECT", statistik.perfect, "#00ffcc"],
+            ["GREAT",   statistik.great,   "#ffd700"],
+            ["GOOD",    statistik.good,    "#ffffff"],
+            ["HOLD",    statistik.hold,    "#ffcc00"],
+            ["MISS",    statistik.miss,    "#ff3355"]
+        ];
+        ctx.font = "bold 14px 'Segoe UI', Arial";
+        for (let i = 0; i < baris.length; i++) {
+            const y = 112 + i * 24;
+            ctx.textAlign = "left";
+            ctx.fillStyle = baris[i][2];
+            ctx.fillText(baris[i][0], 150, y);
+            ctx.textAlign = "right";
+            ctx.fillStyle = "#ffffff";
+            ctx.fillText(String(baris[i][1]), 292, y);
+        }
+
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#ffffff";
+        ctx.font = "bold 18px 'Segoe UI', Arial";
+        ctx.fillText("Skor " + skor + "  •  Akurasi " + akurasi + "%", W / 2, 244);
+        if (rekorBaru) {
+            ctx.fillStyle = "#ffd700";
+            ctx.shadowBlur = 14;
+            ctx.shadowColor = "#ffd700";
+            ctx.font = "bold 16px 'Segoe UI', Arial";
+            ctx.fillText("REKOR BARU!", W / 2, 270);
+        } else {
+            ctx.fillStyle = "#a0a0c0";
+            ctx.font = "13px 'Segoe UI', Arial";
+            ctx.fillText("Best " + terbaik[kunciLevel], W / 2, 270);
+        }
+        ctx.restore();
+        for (let i = 0; i < tombolOver.length; i++) tombolGambar(tombolOver[i], null);
+    }
+
+    function gambarHitung() {
+        const detik = Math.floor(hitung / 60);
+        const frac = (hitung % 60) / 60;
+        const teks = detik < 3 ? String(3 - detik) : "GO!";
+        ctx.save();
+        ctx.translate(W / 2, 210);
+        ctx.scale(1.4 - frac * 0.4, 1.4 - frac * 0.4);
+        ctx.globalAlpha = 1 - frac * 0.5;
+        ctx.textAlign = "center";
+        ctx.font = "bold 72px 'Segoe UI', Arial";
+        ctx.fillStyle = "#00ffcc";
+        ctx.shadowBlur = 25;
+        ctx.shadowColor = "#00ffcc";
+        ctx.fillText(teks, 0, 24);
+        ctx.restore();
+    }
+
+    function gambarKotak(k) {
+        ctx.save();
+        ctx.shadowColor = k.warna;
+        ctx.fillStyle = k.warna;
+        if (k.isHold) {
+            const bodyTinggi = Math.max(k.tinggi - 17, 0);
+            ctx.shadowBlur = k.ditekan ? 28 : 16;
+            ctx.globalAlpha = k.ditekan ? 0.85 : 0.55;
+            if (bodyTinggi > 0) {
+                rrect(k.x + 10, k.y, k.lebar - 20, bodyTinggi, 6);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+            const tinggiKepala = Math.min(35, Math.max(k.tinggi, 8));
+            rrect(k.x, k.y + k.tinggi - tinggiKepala, k.lebar, tinggiKepala, 8);
+            ctx.fill();
+            ctx.fillStyle = "rgba(255,255,255,0.3)";
+            ctx.shadowBlur = 0;
+            rrect(k.x + 5, k.y + k.tinggi - tinggiKepala + 4, k.lebar - 10, 7, 3);
+            ctx.fill();
+        } else {
+            ctx.shadowBlur = 14;
+            rrect(k.x, k.y, k.lebar, k.tinggi, 8);
+            ctx.fill();
+            ctx.fillStyle = "rgba(255,255,255,0.3)";
+            ctx.shadowBlur = 0;
+            rrect(k.x + 5, k.y + 4, k.lebar - 10, 8, 3);
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+
+    function gambarHud() {
+        const total = levelAktif.maks - levelAktif.kecepatan;
+        const isi = total > 0 ? Math.min(1, (kecepatan - levelAktif.kecepatan) / total) : 0;
+        ctx.fillStyle = "rgba(255,255,255,0.08)";
+        ctx.fillRect(0, 0, W, 3);
+        ctx.fillStyle = levelAktif.warna;
+        ctx.fillRect(0, 0, W * isi, 3);
+
+        ctx.save();
+        ctx.font = "16px Arial";
+        ctx.textAlign = "left";
+        for (let i = 0; i < levelAktif.nyawa; i++) {
+            ctx.fillStyle = i < nyawa ? "#ff3355" : "rgba(255,255,255,0.15)";
+            ctx.shadowBlur = i < nyawa ? 8 : 0;
+            ctx.shadowColor = "#ff3355";
+            ctx.fillText("♥", 8 + i * 18, 24);
+        }
+        ctx.restore();
+
+        if (combo >= 5 && layar === "main") {
+            ctx.save();
+            ctx.globalAlpha = 0.16;
+            ctx.textAlign = "center";
+            ctx.fillStyle = "#ffd700";
+            ctx.font = "bold 64px 'Segoe UI', Arial";
+            ctx.fillText(combo + "x", W / 2, 270);
+            ctx.restore();
+        }
+    }
+
+    function gambarPartikelDanTeks(bergerak) {
+        for (let p = daftarPartikel.length - 1; p >= 0; p--) {
+            const part = daftarPartikel[p];
+            if (bergerak) {
+                part.x += part.vx * skalaFrame;
+                part.y += part.vy * skalaFrame;
+                part.vy += 0.1 * skalaFrame;
+                part.alpha -= 0.025 * skalaFrame;
+            }
+            if (part.alpha <= 0) { daftarPartikel.splice(p, 1); continue; }
+            ctx.save();
+            ctx.globalAlpha = part.alpha;
+            ctx.shadowBlur = 8;
+            ctx.shadowColor = part.warna;
+            ctx.fillStyle = part.warna;
+            ctx.fillRect(part.x, part.y, part.ukuran, part.ukuran);
+            ctx.restore();
+        }
+        if (feedback.alpha > 0) {
+            ctx.save();
+            ctx.globalAlpha = Math.min(1, feedback.alpha);
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = feedback.warna;
+            ctx.fillStyle = feedback.warna;
+            ctx.font = "bold 24px 'Segoe UI', Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(feedback.pesan, W / 2, 175);
+            ctx.restore();
+            if (bergerak) feedback.alpha -= 0.025 * skalaFrame;
+        }
+    }
+
+    // ---------- Update ----------
+    function perbaruiGame() {
+        // penanda beat bergerak sama seperti kotak -> musik selalu selaras
+        halfY += kecepatan * skalaFrame;
+        antrianBawah += kecepatan * skalaFrame;   // titik spawn ikut turun bersama kotak
+        while (halfY >= targetIdeal) {
+            dentum(cLangkah);
+            cLangkah++;
+            halfY -= P / 2;
+        }
+
+        for (let i = 0; i < daftarKotak.length; i++) {
+            const k = daftarKotak[i];
+            k.y += kecepatan * skalaFrame;
+
+            if (k.isHold && k.ditekan) {
+                k.tinggi -= kecepatan * skalaFrame;
+                holdAkum += 2 * skalaFrame;
+                const tambah = Math.floor(holdAkum);
+                holdAkum -= tambah;
+                skor += tambah;
+                elSkor.textContent = skor;
+                if (k.tinggi <= 5) {
+                    tampilFeedback("LONG HOLD CLEAR!", "#ffcc00");
+                    suara("HOLD");
+                    getar([20, 40, 20]);
+                    statistik.hold++;
+                    kembangApi(k.x + k.lebar / 2, targetIdeal, k.warna);
+                    buatKotak(i, false);
+                }
+            } else if (k.y + k.tinggi > H + 20) {
+                buatKotak(i, false);
+                kehilanganNyawa("MISS");
+                if (layar !== "main") return;
+            }
+        }
+    }
+
+    function loop() {
+        const sekarang = (typeof performance !== "undefined" && performance.now) ? performance.now() : Date.now();
+        if (waktuTerakhir === 0) skalaFrame = 1;
+        else skalaFrame = Math.min(Math.max((sekarang - waktuTerakhir) / 16.667, 0), 3);
+        waktuTerakhir = sekarang;
+
+        waktu++;
+        ctx.clearRect(0, 0, W, H);
+        ctx.save();
+        if (shake > 0.3) {
+            ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+            shake *= Math.pow(0.85, skalaFrame);
+        } else {
+            shake = 0;
+        }
+
+        gambarLatar();
+        gambarLajur();
+
+        if (layar === "menu") {
+            gambarMenu();
+        } else {
+            if (layar === "main") perbaruiGame();
+            if (layar === "hitung") {
+                const sebelum = Math.floor(hitung / 60);
+                hitung += skalaFrame;
+                const sesudah = Math.floor(hitung / 60);
+                if (sesudah !== sebelum) suara(sesudah >= 3 ? "GO" : "TICK");
+                if (hitung >= 200) { layar = "main"; tampilFeedback("GO!", "#00ffcc"); }
+            }
+            for (let i = 0; i < daftarKotak.length; i++) gambarKotak(daftarKotak[i]);
+            gambarPartikelDanTeks(layar !== "pause");
+            gambarHud();
+            if (layar === "hitung") gambarHitung();
+            if (layar === "pause") gambarPause();
+            if (layar === "over") gambarOver();
+        }
+
+        ctx.restore();
+        requestAnimationFrame(loop);
+    }
+
+    loop();
+})();
+</script>
+
+</body>
+</html>
